@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>見積もりシミュレーター</title>
-    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
-    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
@@ -14,20 +14,19 @@
             margin: 0;
             padding: 0;
         }
-        .icon {
-            width: 20px;
-            height: 20px;
-            display: inline-block;
-        }
     </style>
 </head>
 <body>
-    <div id="root"></div>
+    <div id="root">
+        <div style="padding: 20px; text-align: center;">
+            <p>読み込み中...</p>
+        </div>
+    </div>
 
     <script type="text/babel">
         const { useState } = React;
 
-        const EstimateSimulator = () => {
+        function EstimateSimulator() {
             // 基本データ
             const months = ['7月', '8月', '9月', '10月', '11月', '12月', '1月', '2月', '3月', '4月', '5月', '6月'];
             const businessDays = [22, 20, 20, 22, 18, 20, 19, 18, 21, 21, 18, 22];
@@ -58,8 +57,7 @@
                 'CM': [14, 14, 14, 17, 16, 22, 27, 34, 32, 31, 21, 14]
             });
 
-            const [requestSeats, setRequestSeats] = useState([18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18]);
-            const [utilizationRates, setUtilizationRates] = useState([100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100]);
+            const [requestSeats] = useState([18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18]);
 
             // 繁忙期手当設定
             const [busySeasonSettings, setBusySeasonSettings] = useState({
@@ -110,7 +108,6 @@
                 return Math.round(baselineAmount + difference);
             };
 
-            // 全体見積額計算
             const calculateTotalEstimate = () => {
                 return months.reduce((total, _, index) => total + calculateMonthlyEstimate(index), 0);
             };
@@ -126,19 +123,6 @@
                 setStaffPlan(newStaffPlan);
             };
 
-            const handleSeatsChange = (monthIndex, value) => {
-                const newSeats = [...requestSeats];
-                newSeats[monthIndex] = Math.max(0, parseInt(value) || 0);
-                setRequestSeats(newSeats);
-            };
-
-            const handleUtilizationChange = (monthIndex, value) => {
-                const newRates = [...utilizationRates];
-                newRates[monthIndex] = Math.max(0, Math.min(100, parseFloat(value) || 0));
-                setUtilizationRates(newRates);
-            };
-
-            // 繁忙期手当設定変更ハンドラー
             const handleBusySeasonChange = (field, value) => {
                 setBusySeasonSettings(prev => ({
                     ...prev,
@@ -192,6 +176,13 @@
                 return riskMap[role] || ['• 業務品質への影響'];
             };
 
+            const roleDisplayNames = {
+                'MGR': 'MGR＝1式',
+                'SV': 'SV＝B',
+                'LD': 'LD＝B',
+                'CM': 'CM＝B'
+            };
+
             return (
                 <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 p-6">
                     <div className="max-w-7xl mx-auto">
@@ -205,6 +196,23 @@
                                     <div className="text-sm opacity-90 mb-1">📈 現在の見積額</div>
                                     <div className="text-2xl font-bold">¥{formatNumber(currentTotal)}</div>
                                 </div>
+                                
+                                <div className="bg-gradient-to-r from-green-500 to-green-600 text-white p-4 rounded-xl">
+                                    <div className="text-sm opacity-90 mb-1">📉 削減額</div>
+                                    <div className="text-2xl font-bold">¥{formatNumber(totalReduction)}</div>
+                                </div>
+                                
+                                <div className="bg-gradient-to-r from-purple-500 to-purple-600 text-white p-4 rounded-xl">
+                                    <div className="text-sm opacity-90 mb-1">🎯 目標達成率</div>
+                                    <div className="text-2xl font-bold">{reductionPercentage}%</div>
+                                </div>
+                                
+                                <div className="bg-gradient-to-r from-orange-500 to-orange-600 text-white p-4 rounded-xl">
+                                    <div className="text-sm opacity-90 mb-1">🎯 目標削減額</div>
+                                    <div className="text-2xl font-bold">¥{formatNumber(targetReduction)}</div>
+                                </div>
+                            </div>
+                        </div>
 
                         {/* 繁忙期手当設定 */}
                         <div className="bg-white rounded-2xl shadow-xl p-6 mb-6 border border-gray-100">
@@ -270,22 +278,6 @@
                                     })}
                                 </div>
                             </div>
-                                
-                                <div className="bg-gradient-to-r from-green-500 to-green-600 text-white p-4 rounded-xl">
-                                    <div className="text-sm opacity-90 mb-1">📉 削減額</div>
-                                    <div className="text-2xl font-bold">¥{formatNumber(totalReduction)}</div>
-                                </div>
-                                
-                                <div className="bg-gradient-to-r from-purple-500 to-purple-600 text-white p-4 rounded-xl">
-                                    <div className="text-sm opacity-90 mb-1">🎯 目標達成率</div>
-                                    <div className="text-2xl font-bold">{reductionPercentage}%</div>
-                                </div>
-                                
-                                <div className="bg-gradient-to-r from-orange-500 to-orange-600 text-white p-4 rounded-xl">
-                                    <div className="text-sm opacity-90 mb-1">🎯 目標削減額</div>
-                                    <div className="text-2xl font-bold">¥{formatNumber(targetReduction)}</div>
-                                </div>
-                            </div>
                         </div>
 
                         {/* 月別詳細テーブル */}
@@ -337,13 +329,6 @@
                                                 'CM': [14, 14, 14, 17, 16, 22, 27, 34, 32, 31, 21, 14]
                                             };
                                             
-                                            const roleDisplayNames = {
-                                                'MGR': 'MGR＝1式',
-                                                'SV': 'SV＝B',
-                                                'LD': 'LD＝B',
-                                                'CM': 'CM＝B'
-                                            };
-                                            
                                             return (
                                                 <tr key={role}>
                                                     <td className="p-3 font-medium bg-yellow-50">{roleDisplayNames[role]}</td>
@@ -364,46 +349,6 @@
                                                 </tr>
                                             );
                                         })}
-                                        
-                                        {/* 依頼席数 */}
-                                        <tr>
-                                            <td className="p-3 font-medium bg-green-50">依頼席数</td>
-                                            {requestSeats.map((seats, index) => (
-                                                <td key={index} className="text-center p-2 border-b">
-                                                    <div className="flex flex-col items-center">
-                                                        <input
-                                                            type="number"
-                                                            value={seats}
-                                                            onChange={(e) => handleSeatsChange(index, e.target.value)}
-                                                            className="w-12 text-center border rounded px-1 py-1 text-sm"
-                                                            min="0"
-                                                        />
-                                                        <span className="text-xs text-gray-400 mt-1">(18)</span>
-                                                    </div>
-                                                </td>
-                                            ))}
-                                        </tr>
-                                        
-                                        {/* 充足率 */}
-                                        <tr>
-                                            <td className="p-3 font-medium bg-green-50">充足率(%)</td>
-                                            {utilizationRates.map((rate, index) => (
-                                                <td key={index} className="text-center p-2 border-b">
-                                                    <div className="flex flex-col items-center">
-                                                        <input
-                                                            type="number"
-                                                            value={rate}
-                                                            onChange={(e) => handleUtilizationChange(index, e.target.value)}
-                                                            className="w-12 text-center border rounded px-1 py-1 text-sm"
-                                                            min="0"
-                                                            max="100"
-                                                            step="0.1"
-                                                        />
-                                                        <span className="text-xs text-gray-400 mt-1">(100)</span>
-                                                    </div>
-                                                </td>
-                                            ))}
-                                        </tr>
                                         
                                         {/* 月別見積額 */}
                                         <tr className="bg-purple-50">
@@ -453,7 +398,7 @@
                                             <div className="flex items-center justify-between mb-3">
                                                 <div className="flex items-center gap-2">
                                                     <span className="text-lg">{risk.icon}</span>
-                                                    <h3 className="font-bold text-lg">{role}</h3>
+                                                    <h3 className="font-bold text-lg">{roleDisplayNames[role]}</h3>
                                                 </div>
                                                 <div className="text-right">
                                                     <div className="text-sm opacity-75">削減率</div>
@@ -545,9 +490,13 @@
                     </div>
                 </div>
             );
-        };
+        }
 
-        ReactDOM.render(<EstimateSimulator />, document.getElementById('root'));
+        // Reactアプリをマウント
+        const rootElement = document.getElementById('root');
+        if (rootElement) {
+            ReactDOM.render(React.createElement(EstimateSimulator), rootElement);
+        }
     </script>
 </body>
 </html>
