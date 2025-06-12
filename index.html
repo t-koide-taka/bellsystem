@@ -8,6 +8,7 @@
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <style>
         body { 
             font-family: 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', 'Yu Gothic', sans-serif; 
@@ -180,6 +181,134 @@
             // 数値フォーマット
             const formatNumber = (num) => {
                 return new Intl.NumberFormat('ja-JP').format(num);
+            };
+
+            // PDF出力関数
+            const generatePDF = () => {
+                // jsPDFが利用可能かチェック
+                if (typeof window.jsPDF === 'undefined') {
+                    alert('PDF生成ライブラリが読み込まれていません。しばらく待ってから再度お試しください。');
+                    return;
+                }
+
+                const { jsPDF } = window;
+                const doc = new jsPDF();
+                
+                // 日本語フォント設定の試行
+                try {
+                    doc.setFont('helvetica');
+                } catch (e) {
+                    console.log('Font setting failed, using default');
+                }
+                
+                let yPos = 20;
+                
+                // タイトル
+                doc.setFontSize(18);
+                doc.text('見積もりシミュレーション結果', 105, yPos, { align: 'center' });
+                yPos += 15;
+                
+                // 日付
+                doc.setFontSize(10);
+                const today = new Date().toLocaleDateString('ja-JP');
+                doc.text(`出力日: ${today}`, 20, yPos);
+                yPos += 10;
+                
+                // サマリー
+                doc.setFontSize(14);
+                doc.text('■ 見積もりサマリー', 20, yPos);
+                yPos += 8;
+                
+                doc.setFontSize(10);
+                doc.text(`現在の見積額: ¥${formatNumber(currentTotal)}`, 25, yPos);
+                yPos += 6;
+                doc.text(`削減額: ¥${formatNumber(totalReduction)}`, 25, yPos);
+                yPos += 6;
+                doc.text(`目標達成率: ${reductionPercentage}%`, 25, yPos);
+                yPos += 6;
+                doc.text(`目標削減額: ¥${formatNumber(targetReduction)}`, 25, yPos);
+                yPos += 12;
+                
+                // 月別詳細テーブル
+                doc.setFontSize(12);
+                doc.text('■ 月別詳細', 20, yPos);
+                yPos += 8;
+                
+                // テーブルヘッダー
+                doc.setFontSize(8);
+                const tableStartY = yPos;
+                const colWidth = 14;
+                const rowHeight = 6;
+                
+                // ヘッダー行
+                doc.text('項目', 20, yPos);
+                months.forEach((month, index) => {
+                    doc.text(month, 60 + (index * colWidth), yPos);
+                });
+                yPos += rowHeight;
+                
+                // 区切り線
+                doc.line(20, yPos - 2, 200, yPos - 2);
+                
+                // 人員データ
+                const roles = ['MGR', 'SV', 'LD', 'CM'];
+                const roleNames = {'MGR': 'MGR=1式', 'SV': 'SV=B', 'LD': 'LD=B', 'CM': 'CM=B'};
+                
+                roles.forEach(role => {
+                    doc.text(roleNames[role], 20, yPos);
+                    staffPlan[role].forEach((count, index) => {
+                        doc.text(count.toString(), 60 + (index * colWidth), yPos);
+                    });
+                    yPos += rowHeight;
+                });
+                
+                // ブース数
+                doc.text('ブース数', 20, yPos);
+                boothCounts.forEach((count, index) => {
+                    doc.text(count.toString(), 60 + (index * colWidth), yPos);
+                });
+                yPos += rowHeight;
+                
+                // 月別見積額
+                doc.text('月別見積額(万円)', 20, yPos);
+                months.forEach((_, index) => {
+                    const amount = Math.round(calculateMonthlyEstimate(index) / 10000);
+                    doc.text(amount.toString(), 60 + (index * colWidth), yPos);
+                });
+                yPos += 10;
+                
+                // 繁忙期手当設定
+                doc.setFontSize(12);
+                doc.text('■ 繁忙期手当設定', 20, yPos);
+                yPos += 8;
+                
+                doc.setFontSize(9);
+                const busyMonths = [6, 7, 8, 9, 10]; // 1月-5月のインデックス
+                busyMonths.forEach(monthIndex => {
+                    const allowance = busySeasonAllowances[monthIndex] || 0;
+                    const hours = busySeasonHours[monthIndex] || 0;
+                    const total = hours * allowance;
+                    if (hours > 0) {
+                        doc.text(`${months[monthIndex]}: ¥${allowance}/h × ${formatNumber(hours)}時間 = ¥${formatNumber(total)}`, 25, yPos);
+                        yPos += 6;
+                    }
+                });
+                yPos += 5;
+                
+                // リスク評価サマリー
+                doc.setFontSize(12);
+                doc.text('■ 削減効果', 20, yPos);
+                yPos += 8;
+                
+                doc.setFontSize(10);
+                if (totalReduction >= targetReduction) {
+                    doc.text(`✓ 目標達成！ ¥${formatNumber(totalReduction - targetReduction)}の追加削減効果`, 25, yPos);
+                } else {
+                    doc.text(`目標まで ¥${formatNumber(targetReduction - totalReduction)}の削減が必要`, 25, yPos);
+                }
+                
+                // PDF保存
+                doc.save(`見積もりシミュレーション結果_${today.replace(/\//g, '')}.pdf`);
             };
 
             // リスク評価関数
@@ -578,8 +707,8 @@
                             </div>
                         </div>
 
-                        {/* 削減効果メッセージ */}
-                        <div className="mt-6 text-center">
+                        {/* 削減効果メッセージとPDF出力 */}
+                        <div className="mt-6 text-center space-y-4">
                             <div className={`inline-block px-6 py-3 rounded-full text-white font-bold ${
                                 totalReduction >= targetReduction ? 'bg-green-500' : 'bg-orange-500'
                             }`}>
@@ -587,6 +716,19 @@
                                     ? `🎉 目標達成！ ¥${formatNumber(totalReduction - targetReduction)}の追加削減効果` 
                                     : `目標まで ¥${formatNumber(targetReduction - totalReduction)} の削減が必要`
                                 }
+                            </div>
+                            
+                            {/* PDF出力ボタン */}
+                            <div>
+                                <button
+                                    onClick={generatePDF}
+                                    className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg shadow-lg transition-colors duration-200 flex items-center gap-2 mx-auto"
+                                >
+                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                    </svg>
+                                    PDF出力
+                                </button>
                             </div>
                         </div>
                     </div>
