@@ -185,21 +185,20 @@
 
             // PDF出力関数
             const generatePDF = () => {
-                // jsPDFが利用可能かチェック
-                if (typeof window.jsPDF === 'undefined') {
-                    alert('PDF生成ライブラリが読み込まれていません。しばらく待ってから再度お試しください。');
+                // jsPDFの読み込み確認
+                if (typeof window.jspdf === 'undefined' && typeof window.jsPDF === 'undefined') {
+                    alert('PDF生成機能の読み込み中です。数秒待ってから再度お試しください。');
                     return;
                 }
 
-                const { jsPDF } = window;
-                const doc = new jsPDF();
-                
-                // 日本語フォント設定の試行
-                try {
-                    doc.setFont('helvetica');
-                } catch (e) {
-                    console.log('Font setting failed, using default');
+                // jsPDFオブジェクトの取得
+                const jsPDF = window.jspdf?.jsPDF || window.jsPDF;
+                if (!jsPDF) {
+                    alert('PDF生成機能が利用できません。ページを再読み込みしてください。');
+                    return;
                 }
+
+                const doc = new jsPDF();
                 
                 let yPos = 20;
                 
@@ -236,7 +235,6 @@
                 
                 // テーブルヘッダー
                 doc.setFontSize(8);
-                const tableStartY = yPos;
                 const colWidth = 14;
                 const rowHeight = 6;
                 
@@ -295,7 +293,7 @@
                 });
                 yPos += 5;
                 
-                // リスク評価サマリー
+                // 削減効果
                 doc.setFontSize(12);
                 doc.text('■ 削減効果', 20, yPos);
                 yPos += 8;
@@ -308,7 +306,9 @@
                 }
                 
                 // PDF保存
-                doc.save(`見積もりシミュレーション結果_${today.replace(/\//g, '')}.pdf`);
+                const fileName = `見積もりシミュレーション結果_${today.replace(/\//g, '')}.pdf`;
+                doc.save(fileName);
+                alert(`PDF「${fileName}」をダウンロードしました。`);
             };
 
             // リスク評価関数
@@ -509,6 +509,37 @@
                                                     </td>
                                                 );
                                             })}
+                                        </tr>
+                                        
+                                        {/* 人員計画 */}
+                                        {Object.entries(staffPlan).map(([role, counts]) => {
+                                            const defaultStaff = {
+                                                'MGR': [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                                                'SV': [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                                                'LD': [3, 3, 3, 3, 3, 4, 5, 6, 6, 6, 4, 3],
+                                                'CM': [14, 14, 14, 17, 16, 22, 27, 34, 32, 31, 21, 14]
+                                            };
+                                            
+                                            return (
+                                                <tr key={role}>
+                                                    <td className="p-3 font-medium bg-yellow-50">{roleDisplayNames[role]}</td>
+                                                    {counts.map((count, index) => (
+                                                        <td key={index} className="text-center p-2 border-b">
+                                                            <div className="flex flex-col items-center">
+                                                                <input
+                                                                    type="number"
+                                                                    value={count}
+                                                                    onChange={(e) => handleStaffChange(role, index, e.target.value)}
+                                                                    className="w-12 text-center border rounded px-1 py-1 text-sm"
+                                                                    min="0"
+                                                                />
+                                                                <span className="text-xs text-gray-400 mt-1">({defaultStaff[role][index]})</span>
+                                                            </div>
+                                                        </td>
+                                                    ))}
+                                                </tr>
+                                            );
+                                        })}
                                         
                                         {/* ブース数 */}
                                         <tr>
@@ -549,37 +580,7 @@
                                                     </td>
                                                 );
                                             })}
-                                        </tr></tr>
-                                        
-                                        {/* 人員計画 */}
-                                        {Object.entries(staffPlan).map(([role, counts]) => {
-                                            const defaultStaff = {
-                                                'MGR': [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-                                                'SV': [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-                                                'LD': [3, 3, 3, 3, 3, 4, 5, 6, 6, 6, 4, 3],
-                                                'CM': [14, 14, 14, 17, 16, 22, 27, 34, 32, 31, 21, 14]
-                                            };
-                                            
-                                            return (
-                                                <tr key={role}>
-                                                    <td className="p-3 font-medium bg-yellow-50">{roleDisplayNames[role]}</td>
-                                                    {counts.map((count, index) => (
-                                                        <td key={index} className="text-center p-2 border-b">
-                                                            <div className="flex flex-col items-center">
-                                                                <input
-                                                                    type="number"
-                                                                    value={count}
-                                                                    onChange={(e) => handleStaffChange(role, index, e.target.value)}
-                                                                    className="w-12 text-center border rounded px-1 py-1 text-sm"
-                                                                    min="0"
-                                                                />
-                                                                <span className="text-xs text-gray-400 mt-1">({defaultStaff[role][index]})</span>
-                                                            </div>
-                                                        </td>
-                                                    ))}
-                                                </tr>
-                                            );
-                                        })}
+                                        </tr>
                                         
                                         {/* 月別見積額 */}
                                         <tr className="bg-purple-50">
