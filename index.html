@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>見積もりシミュレーター</title>
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { 
+            font-family: 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', 'Yu Gothic', sans-serif; 
+            margin: 0;
+            padding: 0;
+        }
+        .icon {
+            width: 20px;
+            height: 20px;
+            display: inline-block;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState } = React;
+
+        const EstimateSimulator = () => {
+            // 基本データ
+            const months = ['7月', '8月', '9月', '10月', '11月', '12月', '1月', '2月', '3月', '4月', '5月', '6月'];
+            const businessDays = [22, 20, 20, 22, 18, 20, 19, 18, 21, 21, 18, 22];
+            const workingHours = [176, 160, 160, 176, 144, 160, 152, 144, 168, 168, 144, 176];
+            
+            const prices = {
+                'MGR': 120000,
+                'SV': 2700,
+                'LD': 2380,
+                'CM': 2160,
+                'SV残業': 2810,
+                'LD残業': 2705,
+                'CM残業': 2380,
+                '採用費': 100000,
+                'ブース利用料': 45000
+            };
+
+            // 元の見積額
+            const originalTotal = 155153573;
+            const targetReduction = 5000000;
+            const originalMonthlyEstimates = [8893013, 8492155, 8751355, 10760473, 9278415, 13629887, 16485559, 18536784, 19942290, 19459082, 11726997, 9197563];
+
+            // 状態管理
+            const [staffPlan, setStaffPlan] = useState({
+                'MGR': [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                'SV': [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                'LD': [3, 3, 3, 3, 3, 4, 5, 6, 6, 6, 4, 3],
+                'CM': [14, 14, 14, 17, 16, 22, 27, 34, 32, 31, 21, 14]
+            });
+
+            const [requestSeats, setRequestSeats] = useState([18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18]);
+            const [utilizationRates, setUtilizationRates] = useState([100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100]);
+
+            // 月別見積額計算
+            const calculateMonthlyEstimate = (monthIndex) => {
+                const baselineAmount = originalMonthlyEstimates[monthIndex];
+                const baselineStaff = {
+                    'MGR': [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                    'SV': [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                    'LD': [3, 3, 3, 3, 3, 4, 5, 6, 6, 6, 4, 3],
+                    'CM': [14, 14, 14, 17, 16, 22, 27, 34, 32, 31, 21, 14]
+                };
+                const baselineSeats = 18;
+                
+                let difference = 0;
+                
+                const mgrDiff = staffPlan.MGR[monthIndex] - baselineStaff.MGR[monthIndex];
+                difference += mgrDiff * prices.MGR;
+                
+                const svDiff = staffPlan.SV[monthIndex] - baselineStaff.SV[monthIndex];
+                difference += svDiff * (prices.SV * workingHours[monthIndex] * 1.1 + 35 * prices['SV残業']);
+                
+                const ldDiff = staffPlan.LD[monthIndex] - baselineStaff.LD[monthIndex];
+                difference += ldDiff * (prices.LD * workingHours[monthIndex] * 1.1 + 20 * prices['LD残業']);
+                
+                const cmDiff = staffPlan.CM[monthIndex] - baselineStaff.CM[monthIndex];
+                difference += cmDiff * (prices.CM * workingHours[monthIndex] * 1.1 + 5 * prices['CM残業']);
+                
+                const seatsDiff = requestSeats[monthIndex] - baselineSeats;
+                difference += seatsDiff * (prices['ブース利用料'] + 11500);
+                
+                if (cmDiff > 0) {
+                    difference += cmDiff * prices['採用費'];
+                }
+                
+                return Math.round(baselineAmount + difference);
+            };
+
+            // 全体見積額計算
+            const calculateTotalEstimate = () => {
+                return months.reduce((total, _, index) => total + calculateMonthlyEstimate(index), 0);
+            };
+
+            const currentTotal = calculateTotalEstimate();
+            const totalReduction = originalTotal - currentTotal;
+            const reductionPercentage = (totalReduction / targetReduction * 100).toFixed(1);
+
+            // ハンドラー関数
+            const handleStaffChange = (role, monthIndex, value) => {
+                const newStaffPlan = { ...staffPlan };
+                newStaffPlan[role][monthIndex] = Math.max(0, parseInt(value) || 0);
+                setStaffPlan(newStaffPlan);
+            };
+
+            const handleSeatsChange = (monthIndex, value) => {
+                const newSeats = [...requestSeats];
+                newSeats[monthIndex] = Math.max(0, parseInt(value) || 0);
+                setRequestSeats(newSeats);
+            };
+
+            const handleUtilizationChange = (monthIndex, value) => {
+                const newRates = [...utilizationRates];
+                newRates[monthIndex] = Math.max(0, Math.min(100, parseFloat(value) || 0));
+                setUtilizationRates(newRates);
+            };
+
+            // 数値フォーマット
+            const formatNumber = (num) => {
+                return new Intl.NumberFormat('ja-JP').format(num);
+            };
+
+            // リスク評価関数
+            const getRiskLevel = (rate) => {
+                if (rate <= 0) return { level: 'なし', color: 'bg-green-100 text-green-800 border-green-200', icon: '✅' };
+                if (rate <= 10) return { level: '低', color: 'bg-yellow-100 text-yellow-800 border-yellow-200', icon: '⚠️' };
+                if (rate <= 25) return { level: '中', color: 'bg-orange-100 text-orange-800 border-orange-200', icon: '⚡' };
+                return { level: '高', color: 'bg-red-100 text-red-800 border-red-200', icon: '🚨' };
+            };
+
+            const getRiskContent = (role, rate) => {
+                if (rate <= 0) return ['リスクなし - 適正な人員配置です'];
+                
+                const riskMap = {
+                    'MGR': [
+                        '• 戦略策定・方針決定の遅延',
+                        '• KPI管理・進捗確認の不備',
+                        '• 契約交渉・営業対応の支障',
+                        '• チーム統制・人事管理のリスク'
+                    ],
+                    'SV': [
+                        '• 現場マネジメント不足',
+                        '• LD・CM育成プランの遅延',
+                        '• 重要案件・個別相談対応の支障',
+                        '• 品質管理・報告業務の不備'
+                    ],
+                    'LD': [
+                        '• CMフォロー・指導不足',
+                        '• KPI管理（1on1、FB）の頻度低下',
+                        '• 新人育成・OJTの質低下',
+                        '• エスカレーション対応遅延'
+                    ],
+                    'CM': [
+                        '• コール・メール応答率の低下',
+                        '• 顧客待ち時間の増加',
+                        '• 一次対応品質の低下',
+                        '• 顧客満足度への影響'
+                    ]
+                };
+                
+                return riskMap[role] || ['• 業務品質への影響'];
+            };
+
+            return (
+                <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 p-6">
+                    <div className="max-w-7xl mx-auto">
+                        {/* ヘッダー */}
+                        <div className="bg-white rounded-2xl shadow-xl p-6 mb-6 border border-gray-100">
+                            <h1 className="text-3xl font-bold text-gray-800 mb-4">📊 見積もりシミュレーター</h1>
+                            
+                            {/* サマリー */}
+                            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                                <div className="bg-gradient-to-r from-blue-500 to-blue-600 text-white p-4 rounded-xl">
+                                    <div className="text-sm opacity-90 mb-1">📈 現在の見積額</div>
+                                    <div className="text-2xl font-bold">¥{formatNumber(currentTotal)}</div>
+                                </div>
+                                
+                                <div className="bg-gradient-to-r from-green-500 to-green-600 text-white p-4 rounded-xl">
+                                    <div className="text-sm opacity-90 mb-1">📉 削減額</div>
+                                    <div className="text-2xl font-bold">¥{formatNumber(totalReduction)}</div>
+                                </div>
+                                
+                                <div className="bg-gradient-to-r from-purple-500 to-purple-600 text-white p-4 rounded-xl">
+                                    <div className="text-sm opacity-90 mb-1">🎯 目標達成率</div>
+                                    <div className="text-2xl font-bold">{reductionPercentage}%</div>
+                                </div>
+                                
+                                <div className="bg-gradient-to-r from-orange-500 to-orange-600 text-white p-4 rounded-xl">
+                                    <div className="text-sm opacity-90 mb-1">🎯 目標削減額</div>
+                                    <div className="text-2xl font-bold">¥{formatNumber(targetReduction)}</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* 月別詳細テーブル */}
+                        <div className="bg-white rounded-2xl shadow-xl p-6 mb-6 border border-gray-100">
+                            <h2 className="text-2xl font-bold text-gray-800 mb-4">月別見積詳細</h2>
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-sm">
+                                    <thead>
+                                        <tr className="bg-gray-50">
+                                            <th className="text-left p-3 font-semibold border-b">項目</th>
+                                            {months.map((month, index) => (
+                                                <th key={index} className="text-center p-3 font-semibold border-b min-w-20">{month}</th>
+                                            ))}
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr>
+                                            <td className="p-3 font-medium bg-blue-50">営業日数</td>
+                                            {businessDays.map((days, index) => (
+                                                <td key={index} className="text-center p-3 border-b">{days}</td>
+                                            ))}
+                                        </tr>
+                                        
+                                        {/* 人員計画 */}
+                                        {Object.entries(staffPlan).map(([role, counts]) => {
+                                            const defaultStaff = {
+                                                'MGR': [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                                                'SV': [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                                                'LD': [3, 3, 3, 3, 3, 4, 5, 6, 6, 6, 4, 3],
+                                                'CM': [14, 14, 14, 17, 16, 22, 27, 34, 32, 31, 21, 14]
+                                            };
+                                            
+                                            return (
+                                                <tr key={role}>
+                                                    <td className="p-3 font-medium bg-yellow-50">{role}</td>
+                                                    {counts.map((count, index) => (
+                                                        <td key={index} className="text-center p-2 border-b">
+                                                            <div className="flex flex-col items-center">
+                                                                <input
+                                                                    type="number"
+                                                                    value={count}
+                                                                    onChange={(e) => handleStaffChange(role, index, e.target.value)}
+                                                                    className="w-12 text-center border rounded px-1 py-1 text-sm"
+                                                                    min="0"
+                                                                />
+                                                                <span className="text-xs text-gray-400 mt-1">({defaultStaff[role][index]})</span>
+                                                            </div>
+                                                        </td>
+                                                    ))}
+                                                </tr>
+                                            );
+                                        })}
+                                        
+                                        {/* 依頼席数 */}
+                                        <tr>
+                                            <td className="p-3 font-medium bg-green-50">依頼席数</td>
+                                            {requestSeats.map((seats, index) => (
+                                                <td key={index} className="text-center p-2 border-b">
+                                                    <div className="flex flex-col items-center">
+                                                        <input
+                                                            type="number"
+                                                            value={seats}
+                                                            onChange={(e) => handleSeatsChange(index, e.target.value)}
+                                                            className="w-12 text-center border rounded px-1 py-1 text-sm"
+                                                            min="0"
+                                                        />
+                                                        <span className="text-xs text-gray-400 mt-1">(18)</span>
+                                                    </div>
+                                                </td>
+                                            ))}
+                                        </tr>
+                                        
+                                        {/* 充足率 */}
+                                        <tr>
+                                            <td className="p-3 font-medium bg-green-50">充足率(%)</td>
+                                            {utilizationRates.map((rate, index) => (
+                                                <td key={index} className="text-center p-2 border-b">
+                                                    <div className="flex flex-col items-center">
+                                                        <input
+                                                            type="number"
+                                                            value={rate}
+                                                            onChange={(e) => handleUtilizationChange(index, e.target.value)}
+                                                            className="w-12 text-center border rounded px-1 py-1 text-sm"
+                                                            min="0"
+                                                            max="100"
+                                                            step="0.1"
+                                                        />
+                                                        <span className="text-xs text-gray-400 mt-1">(100)</span>
+                                                    </div>
+                                                </td>
+                                            ))}
+                                        </tr>
+                                        
+                                        {/* 月別見積額 */}
+                                        <tr className="bg-purple-50">
+                                            <td className="p-3 font-bold">月別見積額</td>
+                                            {months.map((_, index) => {
+                                                const monthlyAmount = calculateMonthlyEstimate(index);
+                                                const originalAmount = originalMonthlyEstimates[index];
+                                                const reduction = originalAmount - monthlyAmount;
+                                                return (
+                                                    <td key={index} className="text-center p-3 border-b">
+                                                        <div className="text-sm font-bold">¥{formatNumber(monthlyAmount)}</div>
+                                                        {Math.abs(reduction) > 100 && (
+                                                            <div className={`text-xs ${reduction > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                                                {reduction > 0 ? '↓' : '↑'}¥{formatNumber(Math.abs(reduction))}
+                                                            </div>
+                                                        )}
+                                                    </td>
+                                                );
+                                            })}
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        {/* リスク評価ボックス */}
+                        <div className="bg-white rounded-2xl shadow-xl p-6 border border-gray-100">
+                            <h2 className="text-2xl font-bold text-gray-800 mb-4">人員削減リスク評価</h2>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                {Object.entries(staffPlan).map(([role, counts]) => {
+                                    const baselineStaff = {
+                                        'MGR': [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                                        'SV': [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                                        'LD': [3, 3, 3, 3, 3, 4, 5, 6, 6, 6, 4, 3],
+                                        'CM': [14, 14, 14, 17, 16, 22, 27, 34, 32, 31, 21, 14]
+                                    };
+                                    
+                                    const totalCurrent = counts.reduce((sum, count) => sum + count, 0);
+                                    const totalBaseline = baselineStaff[role].reduce((sum, count) => sum + count, 0);
+                                    const reductionRate = ((totalBaseline - totalCurrent) / totalBaseline * 100);
+                                    
+                                    const risk = getRiskLevel(reductionRate);
+                                    const riskContent = getRiskContent(role, reductionRate);
+
+                                    return (
+                                        <div key={role} className={`border-2 rounded-xl p-4 ${risk.color}`}>
+                                            <div className="flex items-center justify-between mb-3">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-lg">{risk.icon}</span>
+                                                    <h3 className="font-bold text-lg">{role}</h3>
+                                                </div>
+                                                <div className="text-right">
+                                                    <div className="text-sm opacity-75">削減率</div>
+                                                    <div className="font-bold">{reductionRate > 0 ? `${reductionRate.toFixed(1)}%` : '0%'}</div>
+                                                </div>
+                                            </div>
+                                            
+                                            <div className="mb-2">
+                                                <div className="text-sm font-semibold mb-1">リスクレベル: {risk.level}</div>
+                                            </div>
+                                            
+                                            {reductionRate > 0 && (
+                                                <div className="text-sm space-y-1">
+                                                    <div className="font-semibold">想定される影響:</div>
+                                                    {riskContent.map((content, index) => (
+                                                        <div key={index} className="text-xs">{content}</div>
+                                                    ))}
+                                                </div>
+                                            )}
+                                            
+                                            <div className="mt-2 text-xs opacity-75">
+                                                現在: {totalCurrent}名 / 基準: {totalBaseline}名
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                            
+                            {/* 総合リスク評価 */}
+                            <div className="mt-6 p-4 bg-gray-50 rounded-xl">
+                                <h3 className="font-bold text-lg mb-2">🎯 総合リスク評価</h3>
+                                <div className="text-sm space-y-2">
+                                    {(() => {
+                                        const totalReductions = Object.entries(staffPlan).map(([role, counts]) => {
+                                            const baselineStaff = {
+                                                'MGR': [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                                                'SV': [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                                                'LD': [3, 3, 3, 3, 3, 4, 5, 6, 6, 6, 4, 3],
+                                                'CM': [14, 14, 14, 17, 16, 22, 27, 34, 32, 31, 21, 14]
+                                            };
+                                            const totalCurrent = counts.reduce((sum, count) => sum + count, 0);
+                                            const totalBaseline = baselineStaff[role].reduce((sum, count) => sum + count, 0);
+                                            return { role, reduction: totalBaseline - totalCurrent };
+                                        });
+                                        
+                                        const hasHighRisk = totalReductions.some(r => (r.reduction / (r.role === 'CM' ? 256 : r.role === 'LD' ? 49 : 12)) > 0.25);
+                                        const hasMediumRisk = totalReductions.some(r => (r.reduction / (r.role === 'CM' ? 256 : r.role === 'LD' ? 49 : 12)) > 0.1);
+                                        
+                                        if (hasHighRisk) {
+                                            return (
+                                                <div>
+                                                    <div className="text-red-700 font-semibold">🚨 高リスク: サービス品質への重大な影響が懸念されます</div>
+                                                    <div className="text-sm">• 顧客満足度低下、SLA未達成、品質クレーム増加の可能性</div>
+                                                    <div className="text-sm">• 段階的削減やプロセス改善との併用を推奨</div>
+                                                </div>
+                                            );
+                                        }
+                                        if (hasMediumRisk) {
+                                            return (
+                                                <div>
+                                                    <div className="text-orange-700 font-semibold">⚡ 中リスク: 業務品質への影響に注意が必要です</div>
+                                                    <div className="text-sm">• 密接なモニタリングと品質管理の強化が必要</div>
+                                                    <div className="text-sm">• 研修・効率化施策との並行実施を推奨</div>
+                                                </div>
+                                            );
+                                        }
+                                        return (
+                                            <div>
+                                                <div className="text-green-700 font-semibold">✅ 低リスク: 適正な人員配置範囲内です</div>
+                                                <div className="text-sm">• サービス品質を維持しながらコスト削減が可能</div>
+                                            </div>
+                                        );
+                                    })()}
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* 削減効果メッセージ */}
+                        <div className="mt-6 text-center">
+                            <div className={`inline-block px-6 py-3 rounded-full text-white font-bold ${
+                                totalReduction >= targetReduction ? 'bg-green-500' : 'bg-orange-500'
+                            }`}>
+                                {totalReduction >= targetReduction 
+                                    ? `🎉 目標達成！ ¥${formatNumber(totalReduction - targetReduction)}の追加削減効果` 
+                                    : `目標まで ¥${formatNumber(targetReduction - totalReduction)} の削減が必要`
+                                }
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        ReactDOM.render(<EstimateSimulator />, document.getElementById('root'));
+    </script>
+</body>
+</html>
