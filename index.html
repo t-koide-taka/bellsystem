@@ -61,6 +61,13 @@
             const [requestSeats, setRequestSeats] = useState([18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18]);
             const [utilizationRates, setUtilizationRates] = useState([100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100]);
 
+            // 繁忙期手当設定
+            const [busySeasonSettings, setBusySeasonSettings] = useState({
+                startMonth: 6, // 1月（インデックス6）
+                endMonth: 10,  // 5月（インデックス10）
+                allowance: 150 // +150円
+            });
+
             // 月別見積額計算
             const calculateMonthlyEstimate = (monthIndex) => {
                 const baselineAmount = originalMonthlyEstimates[monthIndex];
@@ -72,19 +79,26 @@
                 };
                 const baselineSeats = 18;
                 
+                // 繁忙期手当の適用判定
+                const isBusySeason = monthIndex >= busySeasonSettings.startMonth && monthIndex <= busySeasonSettings.endMonth;
+                const busyAllowance = isBusySeason ? busySeasonSettings.allowance : 0;
+                
                 let difference = 0;
                 
                 const mgrDiff = staffPlan.MGR[monthIndex] - baselineStaff.MGR[monthIndex];
                 difference += mgrDiff * prices.MGR;
                 
                 const svDiff = staffPlan.SV[monthIndex] - baselineStaff.SV[monthIndex];
-                difference += svDiff * (prices.SV * workingHours[monthIndex] * 1.1 + 35 * prices['SV残業']);
+                const svBaseCost = (prices.SV + busyAllowance) * workingHours[monthIndex] * 1.1 + 35 * prices['SV残業'];
+                difference += svDiff * svBaseCost;
                 
                 const ldDiff = staffPlan.LD[monthIndex] - baselineStaff.LD[monthIndex];
-                difference += ldDiff * (prices.LD * workingHours[monthIndex] * 1.1 + 20 * prices['LD残業']);
+                const ldBaseCost = (prices.LD + busyAllowance) * workingHours[monthIndex] * 1.1 + 20 * prices['LD残業'];
+                difference += ldDiff * ldBaseCost;
                 
                 const cmDiff = staffPlan.CM[monthIndex] - baselineStaff.CM[monthIndex];
-                difference += cmDiff * (prices.CM * workingHours[monthIndex] * 1.1 + 5 * prices['CM残業']);
+                const cmBaseCost = (prices.CM + busyAllowance) * workingHours[monthIndex] * 1.1 + 5 * prices['CM残業'];
+                difference += cmDiff * cmBaseCost;
                 
                 const seatsDiff = requestSeats[monthIndex] - baselineSeats;
                 difference += seatsDiff * (prices['ブース利用料'] + 11500);
@@ -122,6 +136,14 @@
                 const newRates = [...utilizationRates];
                 newRates[monthIndex] = Math.max(0, Math.min(100, parseFloat(value) || 0));
                 setUtilizationRates(newRates);
+            };
+
+            // 繁忙期手当設定変更ハンドラー
+            const handleBusySeasonChange = (field, value) => {
+                setBusySeasonSettings(prev => ({
+                    ...prev,
+                    [field]: field === 'allowance' ? Math.max(0, parseInt(value) || 0) : parseInt(value)
+                }));
             };
 
             // 数値フォーマット
@@ -183,6 +205,71 @@
                                     <div className="text-sm opacity-90 mb-1">📈 現在の見積額</div>
                                     <div className="text-2xl font-bold">¥{formatNumber(currentTotal)}</div>
                                 </div>
+
+                        {/* 繁忙期手当設定 */}
+                        <div className="bg-white rounded-2xl shadow-xl p-6 mb-6 border border-gray-100">
+                            <h2 className="text-2xl font-bold text-gray-800 mb-4">🎯 繁忙期手当設定</h2>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <div className="bg-blue-50 p-4 rounded-xl">
+                                    <label className="block text-sm font-semibold text-gray-700 mb-2">開始月</label>
+                                    <select 
+                                        value={busySeasonSettings.startMonth}
+                                        onChange={(e) => handleBusySeasonChange('startMonth', e.target.value)}
+                                        className="w-full p-2 border rounded-lg"
+                                    >
+                                        {months.map((month, index) => (
+                                            <option key={index} value={index}>{month}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                
+                                <div className="bg-blue-50 p-4 rounded-xl">
+                                    <label className="block text-sm font-semibold text-gray-700 mb-2">終了月</label>
+                                    <select 
+                                        value={busySeasonSettings.endMonth}
+                                        onChange={(e) => handleBusySeasonChange('endMonth', e.target.value)}
+                                        className="w-full p-2 border rounded-lg"
+                                    >
+                                        {months.map((month, index) => (
+                                            <option key={index} value={index}>{month}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                
+                                <div className="bg-green-50 p-4 rounded-xl">
+                                    <label className="block text-sm font-semibold text-gray-700 mb-2">手当金額（円/時間）</label>
+                                    <input
+                                        type="number"
+                                        value={busySeasonSettings.allowance}
+                                        onChange={(e) => handleBusySeasonChange('allowance', e.target.value)}
+                                        className="w-full p-2 border rounded-lg"
+                                        min="0"
+                                        placeholder="150"
+                                    />
+                                </div>
+                            </div>
+                            
+                            {/* 適用状況表示 */}
+                            <div className="mt-4 p-3 bg-yellow-50 rounded-lg">
+                                <div className="text-sm font-semibold text-gray-700 mb-2">📅 適用状況</div>
+                                <div className="flex flex-wrap gap-2">
+                                    {months.map((month, index) => {
+                                        const isApplied = index >= busySeasonSettings.startMonth && index <= busySeasonSettings.endMonth;
+                                        return (
+                                            <span 
+                                                key={index} 
+                                                className={`px-2 py-1 rounded text-xs ${
+                                                    isApplied 
+                                                        ? 'bg-orange-200 text-orange-800 font-bold' 
+                                                        : 'bg-gray-200 text-gray-600'
+                                                }`}
+                                            >
+                                                {month} {isApplied && `+¥${busySeasonSettings.allowance}`}
+                                            </span>
+                                        );
+                                    })}
+                                </div>
+                            </div>
                                 
                                 <div className="bg-gradient-to-r from-green-500 to-green-600 text-white p-4 rounded-xl">
                                     <div className="text-sm opacity-90 mb-1">📉 削減額</div>
@@ -222,6 +309,25 @@
                                             ))}
                                         </tr>
                                         
+                                        {/* 繁忙期手当適用状況 */}
+                                        <tr>
+                                            <td className="p-3 font-medium bg-orange-50">繁忙期手当</td>
+                                            {months.map((_, index) => {
+                                                const isApplied = index >= busySeasonSettings.startMonth && index <= busySeasonSettings.endMonth;
+                                                return (
+                                                    <td key={index} className="text-center p-3 border-b">
+                                                        <span className={`px-2 py-1 rounded text-xs ${
+                                                            isApplied 
+                                                                ? 'bg-orange-200 text-orange-800 font-bold' 
+                                                                : 'bg-gray-100 text-gray-500'
+                                                        }`}>
+                                                            {isApplied ? `+¥${busySeasonSettings.allowance}` : '-'}
+                                                        </span>
+                                                    </td>
+                                                );
+                                            })}
+                                        </tr>
+                                        
                                         {/* 人員計画 */}
                                         {Object.entries(staffPlan).map(([role, counts]) => {
                                             const defaultStaff = {
@@ -231,9 +337,16 @@
                                                 'CM': [14, 14, 14, 17, 16, 22, 27, 34, 32, 31, 21, 14]
                                             };
                                             
+                                            const roleDisplayNames = {
+                                                'MGR': 'MGR＝1式',
+                                                'SV': 'SV＝B',
+                                                'LD': 'LD＝B',
+                                                'CM': 'CM＝B'
+                                            };
+                                            
                                             return (
                                                 <tr key={role}>
-                                                    <td className="p-3 font-medium bg-yellow-50">{role}</td>
+                                                    <td className="p-3 font-medium bg-yellow-50">{roleDisplayNames[role]}</td>
                                                     {counts.map((count, index) => (
                                                         <td key={index} className="text-center p-2 border-b">
                                                             <div className="flex flex-col items-center">
