@@ -183,132 +183,460 @@
                 return new Intl.NumberFormat('ja-JP').format(num);
             };
 
-            // PDF出力関数
+            // A4サマリーPDF出力関数
             const generatePDF = () => {
-                // jsPDFの読み込み確認
-                if (typeof window.jspdf === 'undefined' && typeof window.jsPDF === 'undefined') {
-                    alert('PDF生成機能の読み込み中です。数秒待ってから再度お試しください。');
-                    return;
-                }
-
-                // jsPDFオブジェクトの取得
-                const jsPDF = window.jspdf?.jsPDF || window.jsPDF;
-                if (!jsPDF) {
-                    alert('PDF生成機能が利用できません。ページを再読み込みしてください。');
-                    return;
-                }
-
-                const doc = new jsPDF();
+                const pdfWindow = window.open('', '_blank');
                 
-                let yPos = 20;
+                // 月別データの計算
+                const monthlyData = months.map((month, index) => ({
+                    month,
+                    amount: calculateMonthlyEstimate(index),
+                    originalAmount: originalMonthlyEstimates[index],
+                    boothCount: boothCounts[index]
+                }));
                 
-                // タイトル
-                doc.setFontSize(18);
-                doc.text('見積もりシミュレーション結果', 105, yPos, { align: 'center' });
-                yPos += 15;
+                // 最大値の計算（棒グラフの高さ調整用）
+                const maxAmount = Math.max(...monthlyData.map(d => d.amount));
                 
-                // 日付
-                doc.setFontSize(10);
-                const today = new Date().toLocaleDateString('ja-JP');
-                doc.text(`出力日: ${today}`, 20, yPos);
-                yPos += 10;
-                
-                // サマリー
-                doc.setFontSize(14);
-                doc.text('■ 見積もりサマリー', 20, yPos);
-                yPos += 8;
-                
-                doc.setFontSize(10);
-                doc.text(`現在の見積額: ¥${formatNumber(currentTotal)}`, 25, yPos);
-                yPos += 6;
-                doc.text(`削減額: ¥${formatNumber(totalReduction)}`, 25, yPos);
-                yPos += 6;
-                doc.text(`目標達成率: ${reductionPercentage}%`, 25, yPos);
-                yPos += 6;
-                doc.text(`目標削減額: ¥${formatNumber(targetReduction)}`, 25, yPos);
-                yPos += 12;
-                
-                // 月別詳細テーブル
-                doc.setFontSize(12);
-                doc.text('■ 月別詳細', 20, yPos);
-                yPos += 8;
-                
-                // テーブルヘッダー
-                doc.setFontSize(8);
-                const colWidth = 14;
-                const rowHeight = 6;
-                
-                // ヘッダー行
-                doc.text('項目', 20, yPos);
-                months.forEach((month, index) => {
-                    doc.text(month, 60 + (index * colWidth), yPos);
-                });
-                yPos += rowHeight;
-                
-                // 区切り線
-                doc.line(20, yPos - 2, 200, yPos - 2);
-                
-                // 人員データ
-                const roles = ['MGR', 'SV', 'LD', 'CM'];
-                const roleNames = {'MGR': 'MGR=1式', 'SV': 'SV=B', 'LD': 'LD=B', 'CM': 'CM=B'};
-                
-                roles.forEach(role => {
-                    doc.text(roleNames[role], 20, yPos);
-                    staffPlan[role].forEach((count, index) => {
-                        doc.text(count.toString(), 60 + (index * colWidth), yPos);
+                // リスク評価の計算
+                const riskEvaluation = () => {
+                    const baselineStaff = {
+                        'MGR': [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                        'SV': [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                        'LD': [3, 3, 3, 3, 3, 4, 5, 6, 6, 6, 4, 3],
+                        'CM': [14, 14, 14, 17, 16, 22, 27, 34, 32, 31, 21, 14]
+                    };
+                    
+                    const totalReductions = Object.entries(staffPlan).map(([role, counts]) => {
+                        const totalCurrent = counts.reduce((sum, count) => sum + count, 0);
+                        const totalBaseline = baselineStaff[role].reduce((sum, count) => sum + count, 0);
+                        const reductionRate = ((totalBaseline - totalCurrent) / totalBaseline * 100);
+                        return { role, reductionRate, totalCurrent, totalBaseline };
                     });
-                    yPos += rowHeight;
-                });
+                    
+                    const hasHighRisk = totalReductions.some(r => r.reductionRate > 25);
+                    const hasMediumRisk = totalReductions.some(r => r.reductionRate > 10);
+                    
+                    return { totalReductions, hasHighRisk, hasMediumRisk };
+                };
                 
-                // ブース数
-                doc.text('ブース数', 20, yPos);
-                boothCounts.forEach((count, index) => {
-                    doc.text(count.toString(), 60 + (index * colWidth), yPos);
-                });
-                yPos += rowHeight;
+                const { totalReductions, hasHighRisk, hasMediumRisk } = riskEvaluation();
                 
-                // 月別見積額
-                doc.text('月別見積額(万円)', 20, yPos);
-                months.forEach((_, index) => {
-                    const amount = Math.round(calculateMonthlyEstimate(index) / 10000);
-                    doc.text(amount.toString(), 60 + (index * colWidth), yPos);
-                });
-                yPos += 10;
+                pdfWindow.document.write(`
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>見積書サマリー 2025年度</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        @page {
+            size: A4;
+            margin: 15mm;
+        }
+        
+        body {
+            font-family: 'Noto Sans JP', 'Hiragino Sans', 'Yu Gothic', 'Meiryo', sans-serif;
+            font-size: 12px;
+            line-height: 1.4;
+            color: #333;
+            background: white;
+            width: 210mm;
+            height: 297mm;
+            padding: 15mm;
+            margin: 0 auto;
+            box-shadow: 0 0 20px rgba(0,0,0,0.1);
+        }
+        
+        .page-header {
+            text-align: center;
+            border-bottom: 3px solid #2c5282;
+            padding-bottom: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .page-title {
+            font-size: 24px;
+            font-weight: 700;
+            color: #2c5282;
+            margin-bottom: 5px;
+        }
+        
+        .page-subtitle {
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 10px;
+        }
+        
+        .issue-date {
+            font-size: 11px;
+            color: #999;
+        }
+        
+        .section {
+            margin-bottom: 25px;
+        }
+        
+        .section-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: #2c5282;
+            margin-bottom: 12px;
+            padding-left: 10px;
+            border-left: 4px solid #2c5282;
+        }
+        
+        .kpi-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 15px;
+            margin-bottom: 25px;
+        }
+        
+        .kpi-card {
+            background: #f7fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 15px;
+            text-align: center;
+            position: relative;
+        }
+        
+        .kpi-card.primary {
+            background: #ebf8ff;
+            border-color: #3182ce;
+        }
+        
+        .kpi-card.success {
+            background: #f0fff4;
+            border-color: #38a169;
+        }
+        
+        .kpi-card.warning {
+            background: #fffaf0;
+            border-color: #dd6b20;
+        }
+        
+        .kpi-card.danger {
+            background: #fed7d7;
+            border-color: #e53e3e;
+        }
+        
+        .kpi-label {
+            font-size: 11px;
+            color: #666;
+            margin-bottom: 5px;
+            font-weight: 500;
+        }
+        
+        .kpi-value {
+            font-size: 20px;
+            font-weight: 700;
+            color: #2d3748;
+            margin-bottom: 3px;
+        }
+        
+        .kpi-change {
+            font-size: 10px;
+            color: #666;
+        }
+        
+        .monthly-chart {
+            background: #f7fafc;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 25px;
+        }
+        
+        .chart-container {
+            display: grid;
+            grid-template-columns: repeat(12, 1fr);
+            gap: 8px;
+            margin-top: 15px;
+        }
+        
+        .month-column {
+            text-align: center;
+        }
+        
+        .month-label {
+            font-size: 10px;
+            color: #666;
+            margin-bottom: 5px;
+            font-weight: 500;
+        }
+        
+        .month-bar {
+            background: #e2e8f0;
+            border-radius: 4px;
+            position: relative;
+            margin-bottom: 5px;
+            height: 80px;
+            display: flex;
+            align-items: flex-end;
+        }
+        
+        .month-bar-fill {
+            width: 100%;
+            border-radius: 4px;
+            background: linear-gradient(to top, #3182ce, #63b3ed);
+            transition: all 0.3s ease;
+            position: relative;
+            min-height: 15px;
+        }
+        
+        .month-bar-fill.peak {
+            background: linear-gradient(to top, #e53e3e, #fc8181);
+        }
+        
+        .month-value {
+            font-size: 9px;
+            color: #2d3748;
+            font-weight: 600;
+            writing-mode: vertical-lr;
+            text-orientation: mixed;
+            position: absolute;
+            top: -15px;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+        
+        .risk-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        
+        .risk-category {
+            background: #f7fafc;
+            border-radius: 8px;
+            padding: 15px;
+            border-left: 4px solid #718096;
+        }
+        
+        .risk-category.high {
+            border-left-color: #e53e3e;
+            background: #fed7d7;
+        }
+        
+        .risk-category.medium {
+            border-left-color: #dd6b20;
+            background: #fef5e7;
+        }
+        
+        .risk-category.low {
+            border-left-color: #38a169;
+            background: #f0fff4;
+        }
+        
+        .risk-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: #2d3748;
+            margin-bottom: 8px;
+        }
+        
+        .risk-item {
+            font-size: 11px;
+            color: #4a5568;
+            margin-bottom: 4px;
+            padding-left: 8px;
+            position: relative;
+        }
+        
+        .risk-item::before {
+            content: '•';
+            position: absolute;
+            left: 0;
+            color: #a0aec0;
+        }
+        
+        .summary-box {
+            background: #2c5282;
+            color: white;
+            border-radius: 8px;
+            padding: 15px;
+            text-align: center;
+            margin-top: 20px;
+        }
+        
+        .summary-title {
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 10px;
+        }
+        
+        .summary-content {
+            font-size: 11px;
+            line-height: 1.5;
+        }
+        
+        .legend {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            margin-top: 10px;
+            font-size: 10px;
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        
+        .legend-color {
+            width: 12px;
+            height: 12px;
+            border-radius: 2px;
+        }
+        
+        @media print {
+            body {
+                box-shadow: none;
+                width: auto;
+                height: auto;
+                padding: 0;
+                margin: 0;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="page-header">
+        <div class="page-title">サポート業務見積サマリー</div>
+        <div class="page-subtitle">2025年度（2025年7月 - 2026年6月）</div>
+        <div class="issue-date">発行日: ${new Date().toLocaleDateString('ja-JP')}</div>
+    </div>
+    
+    <div class="section">
+        <div class="section-title">📊 見積概要</div>
+        <div class="kpi-grid">
+            <div class="kpi-card primary">
+                <div class="kpi-label">現在の見積額</div>
+                <div class="kpi-value">¥${(currentTotal / 1000000).toFixed(1)}M</div>
+                <div class="kpi-change">年間総額</div>
+            </div>
+            <div class="kpi-card ${totalReduction > 0 ? 'success' : 'danger'}">
+                <div class="kpi-label">削減額</div>
+                <div class="kpi-value">¥${(totalReduction / 1000000).toFixed(1)}M</div>
+                <div class="kpi-change">${totalReduction > 0 ? '削減達成' : '削減なし'}</div>
+            </div>
+            <div class="kpi-card ${reductionPercentage >= 100 ? 'success' : parseFloat(reductionPercentage) > 50 ? 'warning' : 'danger'}">
+                <div class="kpi-label">目標達成率</div>
+                <div class="kpi-value">${reductionPercentage}%</div>
+                <div class="kpi-change">${reductionPercentage >= 100 ? '達成' : '未達成'}</div>
+            </div>
+            <div class="kpi-card danger">
+                <div class="kpi-label">目標削減額</div>
+                <div class="kpi-value">¥${(targetReduction / 1000000).toFixed(1)}M</div>
+                <div class="kpi-change">要削減</div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="section">
+        <div class="section-title">📈 月別見積推移</div>
+        <div class="monthly-chart">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                <span style="font-size: 13px; font-weight: 600;">月別コスト（百万円）</span>
+                <span style="font-size: 11px; color: #666;">最大: ${(maxAmount / 1000000).toFixed(1)}M</span>
+            </div>
+            <div class="chart-container">
+                ${monthlyData.map((data, index) => {
+                    const height = (data.amount / maxAmount * 100);
+                    const isPeak = index >= 6 && index <= 10; // 1月-5月
+                    const amountInM = (data.amount / 1000000).toFixed(1);
+                    
+                    return `
+                    <div class="month-column">
+                        <div class="month-label">${data.month}</div>
+                        <div class="month-bar">
+                            <div class="month-bar-fill ${isPeak ? 'peak' : ''}" style="height: ${height}%;">
+                                <div class="month-value">${amountInM}</div>
+                            </div>
+                        </div>
+                    </div>
+                    `;
+                }).join('')}
+            </div>
+            <div class="legend">
+                <div class="legend-item">
+                    <div class="legend-color" style="background: linear-gradient(to top, #3182ce, #63b3ed);"></div>
+                    <span>通常期</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: linear-gradient(to top, #e53e3e, #fc8181);"></div>
+                    <span>繁忙期（手当込み）</span>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="section">
+        <div class="section-title">⚠️ リスク評価</div>
+        <div class="risk-grid">
+            <div class="risk-category ${hasHighRisk ? 'high' : hasMediumRisk ? 'medium' : 'low'}">
+                <div class="risk-title">${hasHighRisk ? '🔴 高リスク' : hasMediumRisk ? '🟡 中リスク' : '🟢 低リスク'}</div>
+                ${totalReductions.filter(r => r.reductionRate > 0).map(r => 
+                    `<div class="risk-item">${r.role}: ${r.reductionRate.toFixed(1)}%削減 (${r.totalCurrent}/${r.totalBaseline}名)</div>`
+                ).join('')}
+                ${totalReductions.filter(r => r.reductionRate > 0).length === 0 ? 
+                    '<div class="risk-item">人員削減なし - 適正配置</div>' : ''}
+            </div>
+            <div class="risk-category medium">
+                <div class="risk-title">🟡 運用リスク</div>
+                <div class="risk-item">繁忙期手当: ¥${formatNumber(
+                    Object.keys(busySeasonHours).reduce((total, monthIndex) => {
+                        const hours = busySeasonHours[monthIndex] || 0;
+                        const allowance = busySeasonAllowances[monthIndex] || 0;
+                        return total + (hours * allowance);
+                    }, 0)
+                )}</div>
+                <div class="risk-item">最大ブース数: ${Math.max(...boothCounts)}ブース</div>
+                <div class="risk-item">月間変動率: ${((maxAmount / Math.min(...monthlyData.map(d => d.amount))) * 100 - 100).toFixed(0)}%</div>
+            </div>
+            <div class="risk-category low">
+                <div class="risk-title">🟢 安定要素</div>
+                <div class="risk-item">管理体制: MGR・SV確保</div>
+                <div class="risk-item">基本単価: 据え置き</div>
+                <div class="risk-item">通信インフラ: 安定</div>
+            </div>
+            <div class="risk-category medium">
+                <div class="risk-title">💡 改善提案</div>
+                <div class="risk-item">繁忙期の人員配置最適化</div>
+                <div class="risk-item">AI・自動化による効率化</div>
+                <div class="risk-item">段階的コスト削減計画</div>
+                <div class="risk-item">ブース利用率の最適化</div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="summary-box">
+        <div class="summary-title">総合評価</div>
+        <div class="summary-content">
+            現在の見積額¥${(currentTotal / 1000000).toFixed(1)}Mは${totalReduction >= 0 ? `原案から¥${(totalReduction / 1000000).toFixed(1)}M削減` : `原案を¥${(Math.abs(totalReduction) / 1000000).toFixed(1)}M超過`}しています。<br>
+            ${totalReduction >= targetReduction 
+                ? `目標削減額を達成し、追加で¥${((totalReduction - targetReduction) / 1000000).toFixed(1)}Mの削減効果があります。` 
+                : `目標達成まで¥${((targetReduction - totalReduction) / 1000000).toFixed(1)}Mの追加削減が必要です。`}<br>
+            <strong>推奨アクション:</strong> ${hasHighRisk ? '段階的削減とリスク軽減策の実施' : hasMediumRisk ? '品質モニタリング強化' : '現行プランでの実行可能'}</div>
+    </div>
+</body>
+</html>
+                `);
                 
-                // 繁忙期手当設定
-                doc.setFontSize(12);
-                doc.text('■ 繁忙期手当設定', 20, yPos);
-                yPos += 8;
+                pdfWindow.document.close();
                 
-                doc.setFontSize(9);
-                const busyMonths = [6, 7, 8, 9, 10]; // 1月-5月のインデックス
-                busyMonths.forEach(monthIndex => {
-                    const allowance = busySeasonAllowances[monthIndex] || 0;
-                    const hours = busySeasonHours[monthIndex] || 0;
-                    const total = hours * allowance;
-                    if (hours > 0) {
-                        doc.text(`${months[monthIndex]}: ¥${allowance}/h × ${formatNumber(hours)}時間 = ¥${formatNumber(total)}`, 25, yPos);
-                        yPos += 6;
-                    }
-                });
-                yPos += 5;
-                
-                // 削減効果
-                doc.setFontSize(12);
-                doc.text('■ 削減効果', 20, yPos);
-                yPos += 8;
-                
-                doc.setFontSize(10);
-                if (totalReduction >= targetReduction) {
-                    doc.text(`✓ 目標達成！ ¥${formatNumber(totalReduction - targetReduction)}の追加削減効果`, 25, yPos);
-                } else {
-                    doc.text(`目標まで ¥${formatNumber(targetReduction - totalReduction)}の削減が必要`, 25, yPos);
-                }
-                
-                // PDF保存
-                const fileName = `見積もりシミュレーション結果_${today.replace(/\//g, '')}.pdf`;
-                doc.save(fileName);
-                alert(`PDF「${fileName}」をダウンロードしました。`);
+                // PDFダイアログを自動で開く
+                setTimeout(() => {
+                    pdfWindow.print();
+                }, 500);
             };
 
             // リスク評価関数
@@ -728,7 +1056,7 @@
                                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                                     </svg>
-                                    PDF出力
+                                    📄 A4サマリー出力
                                 </button>
                             </div>
                         </div>
